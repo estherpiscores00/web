@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Visor de Rutas Interactivo</title>
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.js"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.css" rel="stylesheet">
+    <style>
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        
+        /* Diseño del Popup */
+        .mapboxgl-popup-content { padding: 0; overflow: hidden; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+        .popup-header { background: #1d3557; color: white; padding: 10px 15px; font-weight: bold; }
+        .popup-body { padding: 15px; max-width: 250px; }
+        .popup-img { width: 100%; height: auto; display: block; border-bottom: 1px solid #eee; }
+        .info-row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.9em; }
+        .btn-reset { 
+            position: absolute; top: 20px; left: 20px; z-index: 10;
+            padding: 10px 15px; background: white; border: none; 
+            border-radius: 8px; cursor: pointer; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+
+
+        }
+        /* Estilo específico para el popup de "pasado por encima" */
+        .hover-popup .mapboxgl-popup-content {
+            padding: 5px 10px;
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid #1d3557;
+            font-size: 13px;
+            pointer-events: none; /* Para que no interfiera con el click */
+        }
+
+
+
+    </style>
+</head>
+<body>
+
+<button class="btn-reset" onclick="resetMap()">Ver todas las rutas </button>
+<div id="map"></div>
+
+
+<script>
+    mapboxgl.accessToken = 'pk.eyJ1IjoiZXN0ZXJzaXBjb3JlIiwiYSI6ImNtbm5tYm95YjF1d3oyb3NtZ3BrMHVsYncifQ.SPcWwh9mVWxjZbV7aKbE1Q';
+
+    const map = new mapboxgl.Map({
+        container: 'map',
+        style: 'mapbox://styles/estersipcore/cmnoymtip004k01s3gnct9psz', 
+        center: [-3.70, 40.41], // Centro de España (ajusta a tu zona)
+        zoom: 7
+    });
+
+    // AQUÍ: Definir el popup de hover justo después de crear el mapa
+    const hoverPopup = new mapboxgl.Popup({
+        closeButton: false,
+        closeOnClick: false,
+        className: 'hover-popup' // Usamos la clase que definimos en el CSS
+    });
+
+    map.on('load', () => {
+        // CAPA DE RUTAS (Líneas)
+        map.addSource('rutas-src', { type: 'vector', url: 'mapbox://estersipcore.0f9wytek' });
+        map.addLayer({
+            'id': 'capa-rutas',
+            'type': 'line',
+            'source': 'rutas-src',
+            'source-layer': 'rutas_unificadas_con_id-2zzxyg',
+            'paint': {
+                'line-color': '#e63946',
+                'line-width': 5,
+                'line-opacity': 0 // Oculta al inicio
+            }
+        });
+
+        // CAPA DE PUNTOS (Círculos)
+        map.addSource('puntos-src', { type: 'vector', url: 'mapbox://estersipcore.7zr887jo' });
+        map.addLayer({
+            'id': 'capa-puntos',
+            'type': 'circle',
+            'source': 'puntos-src',
+            'source-layer': 'puntos_completos_interactivos-96t6ur',
+            'paint': {
+                'circle-radius': 7,
+                'circle-color': '#ff0000',
+                'circle-stroke-width': 2,
+                'circle-stroke-color': '#fff'
+            }
+        });
+
+
+
+        // INTERACCIÓN AL CLIC
+        map.on('click', 'capa-puntos', (e) => {
+            const p = e.features[0].properties;
+
+            // 1. Filtrar la ruta vinculada
+            map.setFilter('capa-rutas', ['==', ['get', 'id_ruta'], p.id_ruta]);
+            map.setPaintProperty('capa-rutas', 'line-opacity', 1);
+
+            // 2. Crear Popup con todos los campos del Excel
+            const html = `
+                <div class="popup-header">${p.name || 'Información'}</div>
+                <div class="popup-body">
+                    <div class="info-row"><span>Temporada:</span> <strong>${p.temporada}</strong></div>
+                    
+                    <div class="info-row"><span>Fecha:</span> <strong>${p.fecha ? p.fecha.split('T')[0].split('-').reverse().join('/') : '---'}</strong></div>
+                    
+                    <div class="info-row"><span>Participantes:</span> <strong>${p.participantes}</strong></div>
+                    <div class="info-row"><span>Distancia:</span> <strong>${p.distancia} km</strong></div>
+                    <div class="info-row"><span>Desnivel:</span> <strong>${p.desnivel} mt</strong></div>
+                    <div class="info-row"><span>Tiempo:</span> <strong>${p.tiempo}</strong></div>
+                    <div class="info-row"><span>Comentario:</span> <strong>${p.comentario}</strong></div>
+
+                    ${p.wikiloc ? `
+                        <div style="margin: 12px 0;">
+                            <a href="${p.wikiloc}" target="_blank" style="
+                                display: block;
+                                text-align: center;
+                                padding: 8px;
+                                background-color: #84b404;
+                                color: white;
+                                text-decoration: none;
+                                border-radius: 4px;
+                                font-weight: bold;
+                                font-size: 0.9em;
+                            ">
+                                Ver ruta en Wikiloc ↗
+                            </a>
+                        </div>
+                    ` : ''}
+
+                    <img class="popup-img" src="${p.foto}">
+                    <p style="margin-top:10px; color:#666; font-size:0.85em;">${p.descripcion || ''}</p>
+                </div>
+            `;
+
+            new mapboxgl.Popup()
+                .setLngLat(e.lngLat)
+                .setHTML(html)
+                .addTo(map);
+
+            map.flyTo({ center: e.lngLat, zoom: 13, duration: 2000 });
+        });
+
+        // EVENTO 2: MOUSE ENTER (Lo nuevo para el hover)
+        map.on('mouseenter', 'capa-puntos', (e) => {
+            map.getCanvas().style.cursor = 'pointer'; // Cambia cursor a mano
+            const p = e.features[0].properties;
+            
+            // Contenido breve: ID y Nombre
+            const hoverHtml = `<strong>Marcha: ${p.id_ruta}</strong><br>${p.name || p.nombre_ruta}`;
+            
+            hoverPopup.setLngLat(e.lngLat).setHTML(hoverHtml).addTo(map);
+        });
+
+        // EVENTO 3: MOUSE LEAVE (Para que desaparezca al quitar el ratón)
+        map.on('mouseleave', 'capa-puntos', () => {
+            map.getCanvas().style.cursor = ''; // El cursor vuelve a la normalidad
+            hoverPopup.remove(); // Quitamos el popup pequeño
+        });
+
+        // Cambio de cursor
+        map.on('mouseenter', 'capa-puntos', () => map.getCanvas().style.cursor = 'pointer');
+        map.on('mouseleave', 'capa-puntos', () => map.getCanvas().style.cursor = '');
+    });
+
+    function resetMap() {
+        map.setPaintProperty('capa-rutas', 'line-opacity', 0);
+        map.setFilter('capa-rutas', null);
+        map.flyTo({ zoom: 6, center: [-3.70, 40.41] });
+    }
+</script>
+</body>
+</html>
